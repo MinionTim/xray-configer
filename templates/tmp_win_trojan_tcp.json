@@ -91,9 +91,13 @@
     }
   ],
   "routing": {
-    "settings": {
-        "domainStrategy": "AsIs",
-        "rules": []
-    }
+    "domainStrategy": "IPOnDemand",
+    "rules": [
+      {
+        "type": "field",
+        "ip": ["geoip:private"],
+        "outboundTag": "direct"
+      }
+    ]
   }
 }
