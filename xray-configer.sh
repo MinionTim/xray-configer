@@ -1,4 +1,5 @@
 # XRAY_SUB_URL=""
+# XRAY_CONFIG_PATH=""
 HOME_DIR="/etc/xrayconfiger"
 OUTPUT_CONFIGS_DIR="$HOME_DIR/configs"
 TEMLATES_DIR="$HOME_DIR/templates"
@@ -63,7 +64,7 @@ fetch_configs() {
     check_subscribe_changed
     if [[ $? -eq 1 ]]; then
         echo "Subscribe not changed, skipping..."
-        # exit 0
+        exit 0
     fi
     [ -f "$HOME_DIR/sub.txt" ] && echo "Updating subscribe..." || echo "Creating subscribe..."
    
@@ -230,7 +231,7 @@ install() {
     echo "Config files in: $OUTPUT_CONFIGS_DIR"
     echo "Cron job in: crontab, checking subscribe every $interval_min minutes"
     echo "Shortcut in: /usr/bin/xray-configer"
-    info "Installed successfully, you can execute [xray-configer] to rerun the script. Source file [$0] has been deleted"
+    info "Installed successfully, the script will automatically run every $interval_min minutes to ensure that the configuration file is always up to date.\nAlso, you can type 'xray-configer' to see more features. Source file [$0] has been deleted"
 }
 
 # 多方式判断操作系统，试到有值为止。只支持 Debian 9/10/11、Ubuntu 18.04/20.04/22.04 或 CentOS 7/8 ,如非上述操作系统，退出脚本
@@ -307,12 +308,11 @@ usage() {
 
 
 main() {
-    # 显示日期和时间，包括时分秒 
-    hint ":::: [$(date '+%Y-%m-%d %H:%M:%S')]"
     check_root
     OPTION=$(tr 'A-Z' 'a-z' <<< "$1")
+    hint ":::: [$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION"
     case "$OPTION" in
-        h | help ) usage; exit 0;;
+        h | help | "") usage; exit 0;;
         r | update_restart ) ensure_env && update_configs_and_restart; exit 0;;
         f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;

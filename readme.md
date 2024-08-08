@@ -15,20 +15,31 @@ bash -c "$(curl -L https://mirror.ghproxy.com/https://github.com/MinionTim/xray-
 ```bash
 wget -N https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && bash xray-configer.sh install
 ```
+During installation, you will be asked to setup some environment variables:
+- XRAY_SUB_URL: Your subscription url
+- XRAY_CONFIG_PATH: The path of your xray config file. (Optional)
 
+
+
+### (Optional) Install with proxy
 - Use http proxy instead if network is not well
 ```bash
 wget -N https://mirror.ghproxy.com/https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && bash xray-configer.sh install
 ```
 
 ### Run 
+After installed successfully, you can start xray service with the latest config file.
+```bash
+xray-configer r
+```
+- More options, can be found by `xray-configer -h`
 ```bash
 xray-configer [option]
 ```
 | Option | Description |
 | ----- | -------------- |
 |    h \| help | print help info.         |
-|   r \| update_restart | fetch xrayconfig and restart xray   |
+|   r \| update_restart | fetch xrayconfig and restart xray service  |
 |    f \| fetch |fetch config only          |
 |    t \| test |test network with proxy        |
 |    i \| install | install the script         |
