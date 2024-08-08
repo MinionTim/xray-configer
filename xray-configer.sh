@@ -29,10 +29,10 @@ ensure_env() {
         echo "Find xray config path in environment variable: XRAY_CONFIG_PATH: $XRAY_CONFIG_PATH"
         xray_config_path=$XRAY_CONFIG_PATH
     else
-        error "Can not find xray config path. Please set XRAY_CONFIG_PATH environment variable in your system."
+        error "Can not find xray config path. Please set XRAY_CONFIG_PATH environment variable (it MUST BE set in profile，such as ~/.bashrc file), and run 'bash $0 install' again."
     fi
 
-    [ -z "$XRAY_SUB_URL" ] && error "Please set XRAY_SUB_URL environment variable in your system.."
+    [ -z "$XRAY_SUB_URL" ] && error "Please set XRAY_SUB_URL environment variable (it MUST BE set in profile，such as ~/.bashrc file), and run 'bash $0 install' again.\n e.g.:\n export XRAY_SUB_URL=https://sub.example.com/sub?target=xray \n bash $0 install"
 
     [ ! -d "$HOME_DIR" ] && mkdir -p $HOME_DIR
     [ ! -d "$OUTPUT_CONFIGS_DIR" ] && mkdir -p $OUTPUT_CONFIGS_DIR
@@ -197,9 +197,14 @@ transform_to_json() {
 
 install() {
     info "Installing..."    
-    [ ! $(type -p jq) ] && ${PACKAGE_INSTALL[SYS_IDX]} jq
-    [ ! $(type -p wget) ] && ${PACKAGE_INSTALL[SYS_IDX]} wget
-    [ ! $(type -p curl) ] && ${PACKAGE_INSTALL[SYS_IDX]} curl
+    [ ! $(type -p jq) ] && info "install jq" && ${PACKAGE_INSTALL[SYS_IDX]} jq 
+    if [ ! $(type -p jq) ]; then
+        [ "$SYSTEM" = "CentOS" ] && info "install epel-release" && ( ${PACKAGE_INSTALL[SYS_IDX]} epel-release || error "epel-release install failed" )
+        ${PACKAGE_INSTALL[SYS_IDX]} jq || error "jq install failed"
+    fi
+
+    [ ! $(type -p wget) ] && info "install wget" && ( ${PACKAGE_INSTALL[SYS_IDX]} wget || error "wget install failed" )
+    [ ! $(type -p curl) ] && info "install curl" && ( ${PACKAGE_INSTALL[SYS_IDX]} curl || error "curl install failed" )
     
     info "Downloading config templates..."
     rm -fr $TEMLATES_DIR/*

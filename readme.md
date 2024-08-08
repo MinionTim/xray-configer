@@ -19,6 +19,7 @@ During installation, you will be asked to setup some environment variables:
 - XRAY_SUB_URL: Your subscription url
 - XRAY_CONFIG_PATH: The path of your xray config file. (Optional)
 
+**You MUST define these environment variables in profile, such as `~/.bashrc`、`~/.zshrc`，to make sure the script can run properly in cron jobs.**
 
 
 ### (Optional) Install with proxy
