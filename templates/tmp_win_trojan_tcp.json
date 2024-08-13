@@ -49,7 +49,7 @@
       "settings": {
         "servers": [
           {
-            "address": "${peer}",
+            "address": "${server}",
             "method": "chacha20",
             "ota": false,
             "password": "${id}",
@@ -64,7 +64,7 @@
         "security": "tls",
         "tlsSettings": {
           "allowInsecure": false,
-          "serverName": "${peer}",
+          "serverName": "${sni}",
           "alpn": [
             "${alpn}"
           ]

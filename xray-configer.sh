@@ -43,13 +43,20 @@ ensure_env() {
 }
 check_subscribe_changed() {
     info "Checking if subscribe changed..."
-    sub_latest=$(curl -s "$XRAY_SUB_URL")
+    local sub_latest="$(curl -s "$XRAY_SUB_URL")"
+
     # 对sub_latest进行base64解码
-    if ! temp_sub_latest=$(echo $sub_latest | base64 -d); then
-        error "Subscribe parsed error, please check your address."
+    if ! temp_sub_latest=$(echo "$sub_latest" | base64 -di 2>/dev/null); then
+        # base64解码失败，直接校验原始数据格式
+        echo "$sub_latest" | grep -E '^(vless://|vmess://|ss://|trojan://)' > /dev/null
+        [ $? -eq 0 ] && decoded_sub_latest="$sub_latest" || error "Cannot find any valid subscription config node from your subscription link. (original data)"
+    else
+        # base64解码成功
+        echo "$temp_sub_latest" | grep -E '^(vless://|vmess://|ss://trojan://)' > /dev/null
+        [ $? -eq 0 ] && decoded_sub_latest="$temp_sub_latest" || error "Cannot find any valid subscription config node from your subscription link. (decoded data)"
     fi
     if [ -f "$HOME_DIR/sub.txt" ]; then
-        [ "$(cat $HOME_DIR/sub.txt)" != "$sub_latest" ] && return 0 || return 1
+        [ "$(cat $HOME_DIR/sub.txt)" != "$decoded_sub_latest" ] && return 0 || return 1
     else
         return 0
     fi
@@ -66,38 +73,73 @@ fetch_configs() {
         echo "Subscribe not changed, skipping..."
         exit 0
     fi
-    [ -f "$HOME_DIR/sub.txt" ] && echo "Updating subscribe..." || echo "Creating subscribe..."
+    # [ -f "$HOME_DIR/sub.txt" ] && echo "Updating subscribe..." || echo "Creating subscribe..."
    
-    echo $sub_latest > $HOME_DIR/sub.txt
-    sub_latest_decrypted=$(echo $sub_latest | base64 -d)
+    nodes=$HOME_DIR/nodes.txt
+    echo "$decoded_sub_latest" > $HOME_DIR/sub.txt
+    echo -n "" > $nodes
+    rm -rf $OUTPUT_CONFIGS_DIR/*
+    local counter=1
     while read line; do
-        echo "Config ==> $line"
+        echo "Config ==> $counter, $line"
         local json_info=$(transform_to_json "$line")
+        echo $json_info
+        # exit 0
+        if [ $counter -gt 10 ]; then
+            continue
+        else
+            # continue
+            local a=2
+        fi
+
         local protocol=$(echo $json_info | jq -r '.protocol')
         local net=$(echo $json_info | jq -r '.net')
         local type=$(echo $json_info | jq -r '.type')
+        local remark=$(echo $json_info | jq -r '.remark')
+        local idx=$(printf "%03d" $counter)
 
-        # 如果protocol为vmess，且net为ws，则打印vmess_ws, 如果protocol为vless，且type为tcp，则打印vless_tcp
         if [ "$protocol" = "vmess" ] && [ "$net" = "ws" ]; then
-            info "find protocol: vmess_ws"
-            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vmess_ws.json ${OUTPUT_CONFIGS_DIR}/vmess_ws.json
+            info "Find protocol: vmess_ws"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vmess_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_vmess_ws.json
+            echo "["$idx"]" "(vmess_ws) $remark" >> $nodes
+        elif [ "$protocol" = "vmess" ] && [ "$net" = "tcp" ]; then
+            info "Find protocol: vmess_tcp"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vmess_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_vmess_tcp.json
+            echo "["$idx"]" "(vmess_tcp) $remark" >> $nodes
+        elif [ "$protocol" = "vless" ] && [ "$type" = "ws" ]; then
+            info "Find protocol: vless_ws"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vless_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_vless_ws.json
+            echo "["$idx"]" "(vless_ws) $remark" >> $nodes
         elif [ "$protocol" = "vless" ] && [ "$type" = "tcp" ]; then
-            info "find protocol: vless_tcp"
-            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vless_tcp.json ${OUTPUT_CONFIGS_DIR}/vless_tcp.json
+            info "Find protocol: vless_tcp"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vless_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_vless_tcp.json
+            echo "["$idx"]" "(vless_tcp) $remark" >> $nodes
+        elif [ "$protocol" = "trojan" ] && [ "$type" = "ws" ]; then
+            info "Find protocol: trojan_ws"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_ws.json
+            echo "["$idx"]" "(trojan_ws) $remark" >> $nodes
         elif [ "$protocol" = "trojan" ] && [ "$type" = "grpc" ]; then
-            info "find protocol: trojan_grpc"
-            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_grpc.json ${OUTPUT_CONFIGS_DIR}/trojan_grpc.json
+            info "Find protocol: trojan_grpc"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_grpc.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_grpc.json
+            echo "["$idx"]" "(trojan_grpc) $remark" >> $nodes
         elif [ "$protocol" = "trojan" ] && ( [ "$type" = "null" ] || [ "$type" = "tcp" ] ); then
-            info "find protocol: trojan_tcp"
-            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_tcp.json ${OUTPUT_CONFIGS_DIR}/trojan_tcp.json
+            info "Find protocol: trojan_tcp"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_tcp.json
+            echo "["$idx"]" "(trojan_tcp) $remark" >> $nodes
+        elif [ "$protocol" = "ss" ]; then
+            info "Find protocol: ss"
+            echo "["$idx"]" "(ss) $remark" >> $nodes
         else
-            info "unknown protocol." protocol=$protocol, net=$net, type=$type.
+            hint "unknown protocol." protocol=$protocol, net=$net, type=$type.
+            continue
         fi
-    done <<< "$sub_latest_decrypted"
+        ((counter++))
+    done <<< "$decoded_sub_latest"
 
 }
 
 start_with_new_config() {
+    echo "start_with_new_config..."
     #如果config.json为普通文件类型，且非软连接类型，则重命名为config.json.bak+日期   
     local configjson=$xray_config_path
     if [ -e "$configjson" ] && ! [ -L "$configjson" ]; then
@@ -116,11 +158,14 @@ start_with_new_config() {
 
     ${SYSTEMCTL_RESTART_XRAY[SYS_IDX]}
     sleep 2
-    testing_network
+    echo 
+    nodes_list
+    echo 
+    show_proxy_info
 }
 
 testing_network() {
-    port=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "http").port')
+    local port=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "http").port')
     echo "using proxy port: $port to test"
     curl -4 --retry 2 -ksm5 --proxy http://127.0.0.1:$port https://www.google.com > /dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -129,6 +174,17 @@ testing_network() {
     else
         error "network test failed"
     fi
+}
+
+show_proxy_info() {
+    local porthttp=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "http").port')
+    local portsocks=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "socks").port')
+    info "Proxy Info:"
+    echo "http/https proxy server: http://127.0.0.1:${porthttp}"
+    echo "socks proxy server: socks5://127.0.0.1:${portsocks}"
+    echo "e.g."
+    echo "1) set in bash profile: export http_proxy=http://127.0.0.1:${porthttp};export https_proxy=http://127.0.0.1:${porthttp};export ALL_PROXY=socks5://127.0.0.1:${portsocks}"
+    echo "2) set in curl command: curl --proxy http://127.0.0.1:${porthttp} https://www.google.com"
 }
 
 generate_config() {
@@ -148,37 +204,66 @@ generate_config() {
 }
 
 transform_to_json() {
-    local link=$1
+    local link=$(echo "$1" | tr -d '\n\r')
+    # link="trojan://CMLiu@218.158.87.155:11423?security=tls&sni=aliorg.filegear-sg.me&type=ws&host=aliorg.filegear-sg.me&path=%2F#%E9%9F%A9%E5%9B%BD%E3%80%90%E4%BB%98%E8%B4%B9%E6%8E%A8%E8%8D%90%EF%BC%9Ahttps%3A%2F%2Fa0a.xyz%E3%80%9176"
     local protocol=$(echo "$link" | cut -d: -f1)
-    # 1、link本身经过base64加密，如：vmess://eyJwb3J0Ijo4NCwicHMiOiI1YzQ3NTBkOC1WTWVzc19XUyIsInRscyI6InRscyIsImlkIjoiNWM0NzUwZDgtMzEiLCJhaWQiOjAsInYiOjIsImhvc3QiOiJhdTIubmV0Mi54eXoiLCJ0eXBlIjoibm9uZSIsInBhdGgiOiIva3lrenZ3cyIsIm5ldCI6IndzIiwiYWRkIjoiYXUyLm5ldDIueHl6IiwiYWxsb3dJbnNlY3VyZSI6MCwibWV0aG9kIjoibm9uZSIsInBlZXIiOiJhdTIubmV0Mi54eXoiLCJzbmkiOiJhdTIubmV0Mi54eXoifQ==
-    # 如果link不包含？，则截取协议后面的内容
-    if [[ $link != *"?"* ]]; then
-        link_part=$(echo "$link" | sed 's/^.*\/\///;s/#.*//')
-        json_content=$(echo $link_part | base64 -d)
+    # decode URL
+    local flink=$(echo -e "$(echo "$link" | sed 's/%/\\x/g')")
+    link=$(echo "$flink")
+    local json_defalut="{}"
+    [[ "$protocol" = "trojan" ]] && json_defalut='{"alpn":"http/1.1"}'
+    # echo B, "$flink"
+    # 1、link本身经过base64加密，协议后面的内容完全经过base64编码。如：vmess://eyJwb3J0Ijo4NCwicHMiOiI1YzQ3NTBkOC1WTWVzc19XUyIsInRscyI6InRscyIsImlkIjoiNWM0NzUwZDgtMzEiLCJhaWQiOjAsInYiOjIsImhvc3QiOiJhdTIubmV0Mi54eXoiLCJ0eXBlIjoibm9uZSIsInBhdGgiOiIva3lrenZ3cyIsIm5ldCI6IndzIiwiYWRkIjoiYXUyLm5ldDIueHl6IiwiYWxsb3dJbnNlY3VyZSI6MCwibWV0aG9kIjoibm9uZSIsInBlZXIiOiJhdTIubmV0Mi54eXoiLCJzbmkiOiJhdTIubmV0Mi54eXoifQ==
+    # 如果link不包含？,同时不包含@，则截取协议后面的内容 
+    if [[ $link != *"?"* ]] && [[ $link != *"@"* ]]; then
+        local link_part=$(echo "$link" | sed 's/^.*\/\///;s/#.*//')
+        # echo link_part $link_part
+        json_content=$(echo "$link_part" | base64 -di 2>/dev/null)
+        [ $? -eq 0 ] || error "Invalid base64 encoded content: $link_part"
+       
         if ! echo "$json_content" | jq . &> /dev/null; then
             error "Invalid JSON content: $json_content"
         fi
        
         local remark=$(echo "$json_content" | jq -r '.ps')
         local basic_info_json="{\"remark\":\"$remark\",\"protocol\":\"$protocol\"}"
-        local final_json=$(echo "$basic_info_json $json_content" | jq -s add)
+        local final_json=$(jq -n --argjson json1 "$json_defalut" --argjson json2 "$basic_info_json" --argjson json3 "$json_content" \
+                  '$json1 + $json2 + $json3')
         echo $final_json
         return 0
     fi
     
     # 2、link为明文时
-    # 提取protocol， id, server, 和 port
-    local id=$(echo "$link" | sed 's|.*://||' | cut -d@ -f1)
-    local server=$(echo "$link" | sed 's|.*@||' | cut -d: -f1)
-    local port=$(echo "$link" | sed 's|.*://[^@]*@[^:]*:||' | cut -d? -f1)
-    local remark=$(echo "$link" | awk -F'#' '{print $2}')
-
-    local basic_info_json="{\"remark\":\"$remark\",\"protocol\":\"$protocol\",\"id\":\"$id\",\"server\":\"$server\",\"port\":$port}"
+    # 提取protocol， id, server, 和 port.  (protocol://id@server:port)
+    # link="ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTo4M2NlZjNmMC1kN2NkLTRiMDgtYTgwNS1kMmEyNGI4ODEyYWE=@usa1.iepl.cooc.icu:31881#节点104"
+    local id=$(echo "$link" | sed -n 's|.*://\([^@]*\)@.*|\1|p')
+    local server=$(echo "$link" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+    local port=$(echo "$link" | sed -n 's|.*:\([0-9]*\)[?#].*|\1|p')
+    local remark=$(echo "$link" | sed -n 's|.*#\(.*\)|\1|p')
+    # echo R. id:$id, server:$server, port:$port, remark:"$remark"
+    
+    local id_decoded=$(echo "$id" | base64 -di 2>/dev/null)
+    # 如果命令执行成功，且id_decoded包含":"，则执行以下操作
+    if [ $? -eq 0 ] && [[ $id_decoded =~ ":" ]] && [[ $protocol = "ss" ]];then 
+        remark=$(echo "$remark" | tr -d '\n\r')
+        local method=$(echo "$id_decoded" | cut -d ":" -f 1)
+        local password=$(echo "$id_decoded" | cut -d ":" -f 2)
+        local basic_info_json="{\"remark\":\""$remark"\",\"protocol\":\"$protocol\",\"method\":\"$method\",\"password\":\"$password\",\"server\":\"$server\",\"port\":$port}"
+        # echo R1 $basic_info_json
+    elif [[ $id =~ ":" ]] && [[ $protocol = "ss" ]]; then
+        local method=$(echo "$id" | cut -d ":" -f 1)
+        local password=$(echo "$id" | cut -d ":" -f 2)
+        local basic_info_json="{\"remark\":\""$remark"\",\"protocol\":\"$protocol\",\"method\":\"$method\",\"password\":\"$password\",\"server\":\"$server\",\"port\":$port}"
+    else
+        local basic_info_json="{\"remark\":\""$remark"\",\"protocol\":\"$protocol\",\"id\":\"$id\",\"server\":\"$server\",\"port\":$port}"
+    fi
+    
     # 提取查询参数部分
-    local query_params=$(echo "$link" | sed -E 's/.*\?//;s/#.*//')
+    local query_params=$(echo "$link" | sed -E 's/^[^?]*//;s/#.*//' | sed 's/^\?//')
+    # echo "Q2: $query_params"
 
     local query_params_json="{"
-    IFS='&' # 设置内部字段分隔符为 &
+    IFS='&'
     read -ra PAIRS <<< "$query_params" # 将参数字符串读入数组
     for pair in "${PAIRS[@]}"; do
         IFS='=' read -r key value <<< "$pair" # 再次设置内部字段分隔符为 = 并读取键值对
@@ -188,9 +273,12 @@ transform_to_json() {
     # 删除最后一个逗号
     query_params_json="${query_params_json%,}"
     query_params_json+="}"
-    # 合并两个JSON对象
-    local final_json=$(echo "$basic_info_json $query_params_json" | jq -s add)
     
+    # echo "Q" "$basic_info_json", "$query_params_json"
+    # 合并JSON对象,后者的字段会覆盖前者
+    local final_json=$(jq -n --argjson json1 "$json_defalut" --argjson json2 "$basic_info_json" --argjson json3 "$query_params_json" \
+                  '$json1 + $json2 + $json3')
+
     echo "$final_json"
     return 0
 }
@@ -210,8 +298,12 @@ install() {
     rm -fr $TEMLATES_DIR/*
     wget -qO $TEMLATES_DIR/tmp_win_trojan_grpc.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_grpc.json'
     wget -qO $TEMLATES_DIR/tmp_win_trojan_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_tcp.json'
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_ws.json'
     wget -qO $TEMLATES_DIR/tmp_win_vless_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_tcp.json'
+    wget -qO $TEMLATES_DIR/tmp_win_vless_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_ws.json'
     wget -qO $TEMLATES_DIR/tmp_win_vmess_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_ws.json'
+    wget -qO $TEMLATES_DIR/tmp_win_vmess_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_tcp.json'
+    wget -qO $TEMLATES_DIR/tmp_win_ss.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_ss.json'
 
     if [ $(find "$TEMLATES_DIR" -maxdepth 1 -name "*.json" | wc -l) -eq 0 ]; then
         error "Download templates failed."
@@ -239,9 +331,24 @@ install() {
     info "Installed successfully, the script will automatically run every $interval_min minutes to ensure that the configuration file is always up to date.\nAlso, you can type 'xray-configer' to see more features. Source file [$0] has been deleted"
 }
 
+nodes_list() {
+    info "Node list:"
+    echo -e "from [$XRAY_SUB_URL]\n------------------------------"
+    local index=$(basename `readlink -f $xray_config_path` | cut -d '_' -f 1)
+    while read line; do
+        if [[ "$(echo "$line" | sed -n 's|^\[\([0-9]*\)\].*|\1|p')" = "$index" ]]; then
+            warning "*"$line
+        else
+            echo $line
+        fi
+    done < $HOME_DIR/nodes.txt 
+    echo "------------------------------"
+    testing_network
+}
+
 # 多方式判断操作系统，试到有值为止。只支持 Debian 9/10/11、Ubuntu 18.04/20.04/22.04 或 CentOS 7/8 ,如非上述操作系统，退出脚本
 check_operating_system() {
-    unset SYS SYSTEM
+    unset SYS SYSTEM SYS_IDX
     if [ -s /etc/os-release ]; then
         SYS="$(grep -i pretty_name /etc/os-release | cut -d \" -f2)"
     elif [ $(type -p hostnamectl) ]; then
@@ -280,7 +387,7 @@ check_operating_system() {
         [ $(type -p yum) ] && int=2 && SYSTEM='CentOS' || error "本脚本只支持 Debian、Ubuntu、CentOS、MacOS、Arch 或 Alpine 系统。"
     fi
     SYS_IDX=$int
-    echo "System Info：$SYS -- $SYSTEM, $SYS_IDX"
+    # echo "System Info：$SYS -- $SYSTEM, $SYS_IDX"
 }
 
 check_root() {
@@ -294,7 +401,8 @@ uninstall() {
     echo "shortcut removed."
     crontab -l | grep -v "${HOME_DIR}/$(basename $0)" | crontab -
     echo "cron job removed."
-    info "The script is removed successfully."
+    unset XRAY_SUB_URL XRAY_CONFIG_PATH
+    info "The script is removed successfully. Environment variables (XRAY_SUB_URL or XRAY_CONFIG_PATH) NOT removed, need to manually remove them."
 }
 
 usage() {
@@ -307,6 +415,7 @@ usage() {
     echo "  r | update_restart: fetch xrayconfig and restart xray."
     echo "  f | fetch: fetch config only."
     echo "  t | test: test network with proxy."
+    echo "  n | nodes: show node list from subscribe."
     echo "  i | install: install the script."
     echo "  u | uninstall: uninstall the script."
 }
@@ -315,12 +424,13 @@ usage() {
 main() {
     check_root
     OPTION=$(tr 'A-Z' 'a-z' <<< "$1")
-    hint ":::: [$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION"
+    hint "[$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION"
     case "$OPTION" in
         h | help | "") usage; exit 0;;
         r | update_restart ) ensure_env && update_configs_and_restart; exit 0;;
         f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;
+        n | nodes ) ensure_env && nodes_list; exit 0;;
         i | install ) ensure_env && install; exit 0;;
         u | uninstall ) uninstall; exit 0;;
         * ) echo "unknown options \"$OPTION\", please refer to the belowing..."; usage; exit 0;;
