@@ -52,7 +52,8 @@ check_subscribe_changed() {
         [ $? -eq 0 ] && decoded_sub_latest="$sub_latest" || error "Cannot find any valid subscription config node from your subscription link. (original data)"
     else
         # base64解码成功
-        echo "$temp_sub_latest" | grep -E '^(vless://|vmess://|ss://trojan://)' > /dev/null
+        echo "$temp_sub_latest"
+        echo "$temp_sub_latest" | grep -E '^(vless://|vmess://|ss://|trojan://)' > /dev/null
         [ $? -eq 0 ] && decoded_sub_latest="$temp_sub_latest" || error "Cannot find any valid subscription config node from your subscription link. (decoded data)"
     fi
     if [ -f "$HOME_DIR/sub.txt" ]; then
@@ -81,16 +82,12 @@ fetch_configs() {
     rm -rf $OUTPUT_CONFIGS_DIR/*
     local counter=1
     while read line; do
+        if [ $counter -gt 100 ]; then
+            break
+        fi
         echo "Config ==> $counter, $line"
         local json_info=$(transform_to_json "$line")
         echo $json_info
-        # exit 0
-        if [ $counter -gt 10 ]; then
-            continue
-        else
-            # continue
-            local a=2
-        fi
 
         local protocol=$(echo $json_info | jq -r '.protocol')
         local net=$(echo $json_info | jq -r '.net')
@@ -128,6 +125,7 @@ fetch_configs() {
             echo "["$idx"]" "(trojan_tcp) $remark" >> $nodes
         elif [ "$protocol" = "ss" ]; then
             info "Find protocol: ss"
+            generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_ss.json ${OUTPUT_CONFIGS_DIR}/${idx}_ss.json
             echo "["$idx"]" "(ss) $remark" >> $nodes
         else
             hint "unknown protocol." protocol=$protocol, net=$net, type=$type.
@@ -139,7 +137,6 @@ fetch_configs() {
 }
 
 start_with_new_config() {
-    echo "start_with_new_config..."
     #如果config.json为普通文件类型，且非软连接类型，则重命名为config.json.bak+日期   
     local configjson=$xray_config_path
     if [ -e "$configjson" ] && ! [ -L "$configjson" ]; then
@@ -160,13 +157,14 @@ start_with_new_config() {
     sleep 2
     echo 
     nodes_list
+    testing_network
     echo 
     show_proxy_info
 }
 
 testing_network() {
     local port=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "http").port')
-    echo "using proxy port: $port to test"
+    echo "network testing with proxy: http://127.0.0.1:$port"
     curl -4 --retry 2 -ksm5 --proxy http://127.0.0.1:$port https://www.google.com > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         echo "network test success"
@@ -333,7 +331,7 @@ install() {
 
 nodes_list() {
     info "Node list:"
-    echo -e "from [$XRAY_SUB_URL]\n------------------------------"
+    echo -e "   from [$XRAY_SUB_URL]\n------------------------------"
     local index=$(basename `readlink -f $xray_config_path` | cut -d '_' -f 1)
     while read line; do
         if [[ "$(echo "$line" | sed -n 's|^\[\([0-9]*\)\].*|\1|p')" = "$index" ]]; then
@@ -343,7 +341,26 @@ nodes_list() {
         fi
     done < $HOME_DIR/nodes.txt 
     echo "------------------------------"
-    testing_network
+}
+
+change_node() {
+    nodes_list
+    reading "Please input the node index you want to change to:(e.g. 001) " node_index
+    # 如果找到了以[$node_index]开头的行，则打印该行的内容，否则提示输入错误
+    
+    if grep -q "^\[$node_index\]" $HOME_DIR/nodes.txt; then
+        local line=$(grep "^\[$node_index\]" $HOME_DIR/nodes.txt)
+        # 在OUTPUT_CONFIGS_DIR目录下，找到文件名以$node_index_开头的文件，并打印该文件名
+        local config_file=$(ls $OUTPUT_CONFIGS_DIR | grep "^${node_index}_")
+        echo -n "choose node: "; warning "$line"
+        ln -sf $OUTPUT_CONFIGS_DIR/$config_file "$xray_config_path"
+        echo "Restarting xray with config: $config_file"
+        ${SYSTEMCTL_RESTART_XRAY[SYS_IDX]}
+        sleep 1
+        testing_network
+    else
+        error "Input error, please try again."
+    fi
 }
 
 # 多方式判断操作系统，试到有值为止。只支持 Debian 9/10/11、Ubuntu 18.04/20.04/22.04 或 CentOS 7/8 ,如非上述操作系统，退出脚本
@@ -431,6 +448,7 @@ main() {
         f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;
         n | nodes ) ensure_env && nodes_list; exit 0;;
+        c | change_node ) ensure_env && change_node; exit 0;;
         i | install ) ensure_env && install; exit 0;;
         u | uninstall ) uninstall; exit 0;;
         * ) echo "unknown options \"$OPTION\", please refer to the belowing..."; usage; exit 0;;
