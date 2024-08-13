@@ -67,7 +67,7 @@
         "security": "${tls}",
         "tlsSettings": {
           "allowInsecure": false,
-          "serverName": "${peer}"
+          "serverName": "${host}"
         },
         "wsSettings": {
           "path": "${path}",
