@@ -438,6 +438,7 @@ usage() {
     echo "  f | fetch: fetch config only."
     echo "  t | test: test network with proxy."
     echo "  n | nodes: show node list from subscribe."
+    echo "  c | change_node: choose a node from available nodes."
     echo "  i | install: install the script."
     echo "  u | uninstall: uninstall the script."
 }
