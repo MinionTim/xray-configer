@@ -19,11 +19,11 @@ ensure_env() {
 
     # find xray config file path
     if [ "$SYSTEM" = "Debian" ] || [ "$SYSTEM" = "Ubuntu" ] || [ "$SYSTEM" = "CentOS" ]; then
-        xray_config_path=$(systemctl show xray | grep ExecStart | grep -oP '(?<=-config\s)[^;]+')
+        xray_config_path=$(systemctl show xray | grep ExecStart | grep -oP '(?<=-config\s)[^;]+' | awk '{$1=$1};1')
         if [ -z "$xray_config_path" ]; then
             error "Can not find xray config path. Maybe xray can't be called by systemctl."
         else
-            echo "Find xray config path in systemctl: $xray_config_path"
+            echo "Find xray config path in systemctl: \"$xray_config_path\""
         fi
     elif [ -n "$XRAY_CONFIG_PATH" ]; then
         echo "Find xray config path in environment variable: XRAY_CONFIG_PATH: $XRAY_CONFIG_PATH"
@@ -93,7 +93,7 @@ fetch_configs() {
         local net=$(echo $json_info | jq -r '.net')
         local type=$(echo $json_info | jq -r '.type')
         local remark=$(echo $json_info | jq -r '.remark')
-        local idx=$(printf "%03d" $counter)
+        local idx=$(printf "%02d" $counter)
 
         if [ "$protocol" = "vmess" ] && [ "$net" = "ws" ]; then
             info "Find protocol: vmess_ws"
@@ -155,6 +155,8 @@ start_with_new_config() {
 
     ${SYSTEMCTL_RESTART_XRAY[SYS_IDX]}
     sleep 2
+    local status=$(${SYSTEMCTL_ISACTIVE_XRAY[SYS_IDX]}) 
+    [[ "$status" == "active" ]] && info "Xray started successfully." || error "Xray start failed."
     echo 
     nodes_list
     testing_network
@@ -167,10 +169,10 @@ testing_network() {
     echo "network testing with proxy: http://127.0.0.1:$port"
     curl -4 --retry 2 -ksm5 --proxy http://127.0.0.1:$port https://www.google.com > /dev/null 2>&1
     if [ $? -eq 0 ]; then
-        echo "network test success"
+        echo -e "network test success \u2705"
         return 0
     else
-        error "network test failed"
+        error "network test failed \u274C"
     fi
 }
 
@@ -331,7 +333,7 @@ install() {
 
 nodes_list() {
     info "Node list:"
-    echo -e "   from [$XRAY_SUB_URL]\n------------------------------"
+    echo -e "   from \"$XRAY_SUB_URL\"\n------------------------------"
     local index=$(basename `readlink -f $xray_config_path` | cut -d '_' -f 1)
     while read line; do
         if [[ "$(echo "$line" | sed -n 's|^\[\([0-9]*\)\].*|\1|p')" = "$index" ]]; then
@@ -345,7 +347,7 @@ nodes_list() {
 
 change_node() {
     nodes_list
-    reading "Please input the node index you want to change to:(e.g. 001) " node_index
+    reading "Please input the node index you want to change to:(e.g. 01) " node_index
     # 如果找到了以[$node_index]开头的行，则打印该行的内容，否则提示输入错误
     
     if grep -q "^\[$node_index\]" $HOME_DIR/nodes.txt; then
@@ -353,10 +355,12 @@ change_node() {
         # 在OUTPUT_CONFIGS_DIR目录下，找到文件名以$node_index_开头的文件，并打印该文件名
         local config_file=$(ls $OUTPUT_CONFIGS_DIR | grep "^${node_index}_")
         echo -n "choose node: "; warning "$line"
-        ln -sf $OUTPUT_CONFIGS_DIR/$config_file "$xray_config_path"
-        echo "Restarting xray with config: $config_file"
+        ln -sf "$OUTPUT_CONFIGS_DIR/$config_file" "$xray_config_path"
+        echo "Restarting xray with config: $OUTPUT_CONFIGS_DIR/$config_file"
         ${SYSTEMCTL_RESTART_XRAY[SYS_IDX]}
-        sleep 1
+        sleep 2
+        local status=$(${SYSTEMCTL_ISACTIVE_XRAY[SYS_IDX]}) 
+        [[ "$status" == "active" ]] && info "Xray restarted successfully." || error "Xray restart failed."
         testing_network
     else
         error "Input error, please try again."
@@ -389,9 +393,10 @@ check_operating_system() {
     PACKAGE_UPDATE=("apt -y update" "apt -y update" "yum -y update" "apk update -f" "pacman -Sy" "opkg update" "brew update")
     PACKAGE_INSTALL=("apt -y install" "apt -y install" "yum -y install" "apk add -f" "pacman -S --noconfirm" "opkg install" "brew install")
     PACKAGE_UNINSTALL=("apt -y autoremove" "apt -y autoremove" "yum -y autoremove" "apk del -f" "pacman -Rcnsu --noconfirm" "opkg remove --force-depends" "brew uninstall")
-    SYSTEMCTL_START_XRAY=("systemctl start xray" "systemctl start xray" "systemctl start xray" "/opt/warp-go/warp-go --config=/opt/warp-go/warp.conf" "systemctl start xray" "/opt/warp-go/warp-go --config=/opt/warp-go/warp.conf")
+    SYSTEMCTL_START_XRAY=("systemctl start xray" "systemctl start xray" "systemctl start xray" "" "" "")
     SYSTEMCTL_STOP_XRAY=("systemctl stop xray" "systemctl stop xray" "systemctl stop xray" "kill -15 $(pgrep xray)" "systemctl stop xray" "kill -15 $(pgrep xray)")
-    SYSTEMCTL_RESTART_XRAY=("systemctl restart xray" "systemctl restart xray" "systemctl restart xray" "alpine_warp_restart" "systemctl restart wg-quick@wgcf" "alpine_warp_restart")
+    SYSTEMCTL_RESTART_XRAY=("systemctl restart xray" "systemctl restart xray" "systemctl restart xray" "" "" "")
+    SYSTEMCTL_ISACTIVE_XRAY=("systemctl is-active xray" "systemctl is-active xray" "systemctl is-active xray" "" "" "")
     
     local int
     for int in "${!REGEX[@]}"; do
@@ -456,3 +461,4 @@ main() {
 }
 
 main "$@"
+# transform_to_json "vless://cefffd1d-cc58-4560-b4d1-44f1af528f30@151.101.131.1:80?encryption=none&security=none&type=ws&host=fraud.chase&path=%2F%3Fed%3D2048#US%F0%9F%87%BA%F0%9F%87%B8"
