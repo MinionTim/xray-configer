@@ -34,7 +34,7 @@ else
   XRAY_IS_INSTALLED_BEFORE_RUNNING_SCRIPT=0
 fi
 
-GHPROXY='https://mirror.ghproxy.com/'
+GHPROXY='https://ghp.ci/'
 # Xray current version
 CURRENT_VERSION=''
 

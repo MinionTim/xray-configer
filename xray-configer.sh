@@ -4,7 +4,7 @@ HOME_DIR="/etc/xrayconfiger"
 OUTPUT_CONFIGS_DIR="$HOME_DIR/configs"
 TEMLATES_DIR="$HOME_DIR/templates"
 LOGS_DIR="$HOME_DIR/logs"
-GH_PROXY='https://mirror.ghproxy.com/'
+GH_PROXY='https://ghp.ci/'
 
 # 自定义字体彩色，read 函数
 warning() { echo -e "\033[31m\033[01m$*\033[0m"; }  # 红色
@@ -41,6 +41,7 @@ ensure_env() {
     return 0
 
 }
+
 check_subscribe_changed() {
     info "Checking if subscribe changed..."
     local sub_latest="$(curl -s "$XRAY_SUB_URL")"
@@ -312,7 +313,7 @@ install() {
     find "$TEMLATES_DIR" -maxdepth 1 -name "*.json" | xargs -n1 printf "%s\n"
 
     info "Add cron job"
-    local interval_min=10
+    local interval_min=30
     cron_command="*/$interval_min * * * * /bin/bash -l -c 'env PATH=$PATH ${HOME_DIR}/$(basename $0) r' >> ${HOME_DIR}/logs/cron.log 2>&1"
     existing_cron_jobs=$(crontab -l 2>/dev/null)
     if ! echo "$existing_cron_jobs" | grep -qF "$cron_command"; then
@@ -462,4 +463,3 @@ main() {
 }
 
 main "$@"
-# transform_to_json "vless://cefffd1d-cc58-4560-b4d1-44f1af528f30@151.101.131.1:80?encryption=none&security=none&type=ws&host=fraud.chase&path=%2F%3Fed%3D2048#US%F0%9F%87%BA%F0%9F%87%B8"
