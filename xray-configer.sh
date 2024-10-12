@@ -44,7 +44,7 @@ ensure_env() {
 
 check_subscribe_changed() {
     info "Checking if subscribe changed..."
-    local sub_latest="$(curl -s "$XRAY_SUB_URL")"
+    local sub_latest="$(curl -4 --retry 3 -ksm7 "$XRAY_SUB_URL")"
 
     # 对sub_latest进行base64解码
     if ! temp_sub_latest=$(echo "$sub_latest" | base64 -di 2>/dev/null); then
