@@ -329,7 +329,8 @@ install() {
     echo "Config files in: $OUTPUT_CONFIGS_DIR"
     echo "Cron job in: crontab, checking subscribe every $interval_min minutes"
     echo "Shortcut in: /usr/bin/xray-configer"
-    info "Installed successfully, the script will automatically run every $interval_min minutes to ensure that the configuration file is always up to date.\nAlso, you can type 'xray-configer' to see more features. Source file [$0] has been deleted"
+    info "Installed successfully, the script will automatically run every $interval_min minutes to ensure that the configuration file is always up to date.\nAlso, you can run 'xray-configer' to see more features. Source file [$0] has been deleted"
+    echo "Please run 'xray-configer r' to make config enabled before using it for the first time."
 }
 
 nodes_list() {
