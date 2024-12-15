@@ -19,7 +19,7 @@ ensure_env() {
 
     # find xray config file path
     if [ "$SYSTEM" = "Debian" ] || [ "$SYSTEM" = "Ubuntu" ] || [ "$SYSTEM" = "CentOS" ]; then
-        xray_config_path=$(systemctl show xray | grep ExecStart | grep -oP '(?<=-config\s)[^;]+' | awk '{$1=$1};1')
+        xray_config_path=$(systemctl show xray | grep "ExecStart=" | grep -oP '(?<=-config\s)[^;]+' | awk '{$1=$1};1')
         if [ -z "$xray_config_path" ]; then
             error "Can not find xray config path. Maybe xray can't be called by systemctl."
         else

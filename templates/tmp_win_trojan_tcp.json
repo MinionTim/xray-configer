@@ -61,7 +61,7 @@
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "${security}",
+        "security": "tls",
         "tlsSettings": {
           "allowInsecure": false,
           "serverName": "${sni}",
