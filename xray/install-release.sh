@@ -34,7 +34,8 @@ else
   XRAY_IS_INSTALLED_BEFORE_RUNNING_SCRIPT=0
 fi
 
-GHPROXY='https://ghp.ci/'
+# 优先从环境变量获取GH_PROXY，若不存在则使用默认值
+GH_PROXY=${GH_PROXY:-'https://ghfast.top/'}
 # Xray current version
 CURRENT_VERSION=''
 
@@ -412,7 +413,7 @@ get_latest_version() {
   for i in "${!releases_list[@]}"
   do
     releases_list["$i"]="v${releases_list[$i]#v}"
-    grep -q ${GHPROXY}"https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip" "$tmp_file" && break
+    grep -q ${GH_PROXY}"https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip" "$tmp_file" && break
   done
   "rm" "$tmp_file"
   PRE_RELEASE_LATEST="${releases_list[$i]}"
@@ -423,7 +424,7 @@ version_gt() {
 }
 
 download_xray() {
-  DOWNLOAD_LINK=${GHPROXY}"https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
+  DOWNLOAD_LINK=${GH_PROXY}"https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
   echo "Downloading Xray archive: $DOWNLOAD_LINK"
   if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
     echo "ok."
@@ -685,8 +686,8 @@ install_geodata() {
       exit 1
     fi
   }
-  local download_link_geoip=${GHPROXY}"https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
-  local download_link_geosite=${GHPROXY}"https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+  local download_link_geoip=${GH_PROXY}"https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
+  local download_link_geosite=${GH_PROXY}"https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
   local file_ip='geoip.dat'
   local file_dlc='dlc.dat'
   local file_site='geosite.dat'
