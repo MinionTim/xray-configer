@@ -300,14 +300,14 @@ install() {
     
     info "Downloading config templates..."
     rm -fr $TEMLATES_DIR/*
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_grpc.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_grpc.json'
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_tcp.json'
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_ws.json'
-    wget -qO $TEMLATES_DIR/tmp_win_vless_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_tcp.json'
-    wget -qO $TEMLATES_DIR/tmp_win_vless_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_ws.json'
-    wget -qO $TEMLATES_DIR/tmp_win_vmess_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_ws.json'
-    wget -qO $TEMLATES_DIR/tmp_win_vmess_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_tcp.json'
-    wget -qO $TEMLATES_DIR/tmp_win_ss.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_ss.json'
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_grpc.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_grpc.json' || error "Download tmp_win_trojan_grpc.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_tcp.json' || error "Download tmp_win_trojan_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_ws.json' || error "Download tmp_win_trojan_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vless_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_tcp.json' || error "Download tmp_win_vless_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vless_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_ws.json' || error "Download tmp_win_vless_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vmess_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_ws.json' || error "Download tmp_win_vmess_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vmess_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_tcp.json' || error "Download tmp_win_vmess_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_ss.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_ss.json' || error "Download tmp_win_ss.json failed"
 
     if [ $(find "$TEMLATES_DIR" -maxdepth 1 -name "*.json" | wc -l) -eq 0 ]; then
         error "Download templates failed."
