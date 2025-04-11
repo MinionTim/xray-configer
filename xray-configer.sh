@@ -287,6 +287,8 @@ transform_to_json() {
 
 install() {
     info "Installing..."    
+    echo "GITHUB PROXY: $GH_PROXY"
+    
     [ ! $(type -p jq) ] && info "install jq" && ${PACKAGE_INSTALL[SYS_IDX]} jq 
     if [ ! $(type -p jq) ]; then
         [ "$SYSTEM" = "CentOS" ] && info "install epel-release" && ( ${PACKAGE_INSTALL[SYS_IDX]} epel-release || error "epel-release install failed" )
