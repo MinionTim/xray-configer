@@ -7,7 +7,7 @@ A assistive tool for xray. It can generate config files from subscribe link, and
 
 You may need to replace download link with proxy server due to network problem, when you install xray. Also you can simply use the flower script to install xray:
 ```bash
-bash -c "$(curl -L https://ghp.ci/https://github.com/MinionTim/xray-configer/raw/main/xray/install-release.sh)" @ install
+GH_PROXY=https://ghfast.top/ bash -c "$(curl -L https://ghfast.top/https://github.com/MinionTim/xray-configer/raw/main/xray/install-release.sh)" @ install
 ```
 
 ## Usage
@@ -25,7 +25,7 @@ During installation, you will be asked to setup some environment variables:
 ### (Optional) Install with proxy
 - Use http proxy instead if network is not well
 ```bash
-wget -N https://ghp.ci/https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && bash xray-configer.sh install
+wget -N https://ghfast.top/https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && GH_PROXY=https://ghfast.top/ bash xray-configer.sh install
 ```
 
 ### Run 

@@ -4,7 +4,8 @@ HOME_DIR="/etc/xrayconfiger"
 OUTPUT_CONFIGS_DIR="$HOME_DIR/configs"
 TEMLATES_DIR="$HOME_DIR/templates"
 LOGS_DIR="$HOME_DIR/logs"
-GH_PROXY='https://ghp.ci/'
+# 优先从环境变量获取GH_PROXY，若不存在则使用默认值
+GH_PROXY=${GH_PROXY:-'https://ghfast.top/'}
 
 # 自定义字体彩色，read 函数
 warning() { echo -e "\033[31m\033[01m$*\033[0m"; }  # 红色
