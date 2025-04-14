@@ -4,6 +4,10 @@ HOME_DIR="/etc/xrayconfiger"
 OUTPUT_CONFIGS_DIR="$HOME_DIR/configs"
 TEMLATES_DIR="$HOME_DIR/templates"
 LOGS_DIR="$HOME_DIR/logs"
+CONFIG_FILE="$HOME_DIR/config"
+
+DEFAULT_HTTP_PORT=1087
+DEFAULT_SOCKS_PORT=1080
 # 优先从环境变量获取GH_PROXY，若不存在则使用默认值
 GH_PROXY=${GH_PROXY:-'https://ghfast.top/'}
 
@@ -14,7 +18,33 @@ info() { echo -e "\033[32m\033[01m$*\033[0m"; }   # 绿色
 hint() { echo -e "\033[33m\033[01m$*\033[0m"; }   # 黄色
 reading() { read -rp "$(info "$1")" "$2"; }
 
+# 加载配置文件
+load_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+}
+
+# 保存配置到文件
+save_config() {
+    local key=$1
+    local value=$2
+    
+    # 如果配置文件不存在，创建一个空文件
+    [ ! -f "$CONFIG_FILE" ] && touch "$CONFIG_FILE"
+    
+    # 如果配置文件中已经有该键，则更新值；否则，添加新的键值对
+    if grep -q "^$key=" "$CONFIG_FILE"; then
+        sed -i "s|^$key=.*|$key=\"$value\"|" "$CONFIG_FILE"
+    else
+        echo "$key=\"$value\"" >> "$CONFIG_FILE"
+    fi
+}
+
 ensure_env() {
+    # 加载配置文件
+    load_config
+    
     check_operating_system
     [ ! $(type -p xray) ] && error "xray not found, please install xray first. see https://github.com/XTLS/Xray-install/tree/main $(xray)"
 
@@ -23,8 +53,6 @@ ensure_env() {
         xray_config_path=$(systemctl show xray | grep "ExecStart=" | grep -oP '(?<=-config\s)[^;]+' | awk '{$1=$1};1')
         if [ -z "$xray_config_path" ]; then
             error "Can not find xray config path. Maybe xray can't be called by systemctl."
-        else
-            echo "Find xray config path in systemctl: \"$xray_config_path\""
         fi
     elif [ -n "$XRAY_CONFIG_PATH" ]; then
         echo "Find xray config path in environment variable: XRAY_CONFIG_PATH: $XRAY_CONFIG_PATH"
@@ -33,14 +61,16 @@ ensure_env() {
         error "Can not find xray config path. Please set XRAY_CONFIG_PATH environment variable (it MUST BE set in profile，such as ~/.bashrc file), and run 'bash $0 install' again."
     fi
 
-    [ -z "$XRAY_SUB_URL" ] && error "Please set XRAY_SUB_URL environment variable (it MUST BE set in profile，such as ~/.bashrc file), and run 'bash $0 install' again.\n e.g.:\n export XRAY_SUB_URL=https://sub.example.com/sub?target=xray \n bash $0 install"
+    # 检查订阅URL是否存在，如果不存在且不是安装操作，则提示错误
+    if [ -z "$XRAY_SUB_URL" ] && [ "$1" != "install" ]; then
+        error "Subscription URL not found. Please run 'xray-configer install -S YOUR_SUB_URL' to set the subscription URL."
+    fi
 
     [ ! -d "$HOME_DIR" ] && mkdir -p $HOME_DIR
     [ ! -d "$OUTPUT_CONFIGS_DIR" ] && mkdir -p $OUTPUT_CONFIGS_DIR
     [ ! -d "$TEMLATES_DIR" ] && mkdir -p $TEMLATES_DIR
     [ ! -d "$LOGS_DIR" ] && mkdir -p $LOGS_DIR
     return 0
-
 }
 
 check_subscribe_changed() {
@@ -66,16 +96,25 @@ check_subscribe_changed() {
 }
 
 update_configs_and_restart() {
-    fetch_configs
+    # 添加一个参数用于强制更新
+    local force_update=${1:-0}
+    fetch_configs $force_update
     start_with_new_config
 }
 
 fetch_configs() {
+    # 添加一个参数用于强制更新
+    local force_update=${1:-0}
+    
     check_subscribe_changed
-    if [[ $? -eq 1 ]]; then
-        echo "Subscribe not changed, skipping..."
-        exit 0
+    # 如果不是强制更新，则检查订阅是否变化
+    if [ "$force_update" -eq 0 ]; then
+        if [[ $? -eq 1 ]]; then
+            echo "Subscription unchanged, skipping update..."
+            return 0
+        fi
     fi
+    
     # [ -f "$HOME_DIR/sub.txt" ] && echo "Updating subscribe..." || echo "Creating subscribe..."
    
     nodes=$HOME_DIR/nodes.txt
@@ -87,7 +126,7 @@ fetch_configs() {
         if [ $counter -gt 100 ]; then
             break
         fi
-        echo "Config ==> $counter, $line"
+        #echo "Config ==> $counter, $line"
         local json_info=$(transform_to_json "$line")
         echo $json_info
 
@@ -200,8 +239,13 @@ generate_config() {
     template_file=$2
     output_file=$3
     # echo template_file=$template_file, output_file=$output_file
-
+    
     template=$(cat $template_file)
+
+    # 替换模板中的 ${_http_port} 和 ${_socks_port} 字段
+    template=${template//\$\{_http_port\}/$HTTP_PORT}
+    template=${template//\$\{_socks_port\}/$SOCKS_PORT}
+    
     # 遍历json_config中的所有字段，将template中的字段名替换为对应的值，其中字段名的规则是 ${字段名}。
     while IFS= read -r line; do
         key=$(echo $line | cut -d '=' -f 1)
@@ -291,9 +335,51 @@ transform_to_json() {
     return 0
 }
 
+# 修改 install 函数，支持命令行参数
 install() {
     info "Installing..."    
-    echo "GITHUB PROXY: $GH_PROXY"
+    
+    # 解析参数
+    local sub_url=""
+    local http_port=$DEFAULT_HTTP_PORT
+    local socks_port=$DEFAULT_SOCKS_PORT
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -S|--sub_url)
+                if [[ -n "$2" ]]; then
+                    sub_url="$2"
+                    shift 2
+                else
+                    error "Missing subscription URL parameter"
+                fi
+                ;;
+            -h|--http_port)
+                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    http_port="$2"
+                    shift 2
+                else
+                    error "HTTP port must be a valid number"
+                fi
+                ;;
+            -s|--socks_port)
+                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    socks_port="$2"
+                    shift 2
+                else
+                    error "SOCKS port must be a valid number"
+                fi
+                ;;
+            *)
+                error "Unknown parameter: $1"
+                ;;
+        esac
+    done
+    
+    # 检查必填参数
+    if [ -z "$sub_url" ]; then
+        error "Subscription URL not found. Please run 'xray-configer install -S YOUR_SUB_URL' to set the subscription URL."
+    fi
     
     [ ! $(type -p jq) ] && info "install jq" && ${PACKAGE_INSTALL[SYS_IDX]} jq 
     if [ ! $(type -p jq) ]; then
@@ -304,16 +390,32 @@ install() {
     [ ! $(type -p wget) ] && info "install wget" && ( ${PACKAGE_INSTALL[SYS_IDX]} wget || error "wget install failed" )
     [ ! $(type -p curl) ] && info "install curl" && ( ${PACKAGE_INSTALL[SYS_IDX]} curl || error "curl install failed" )
     
+    # 保存配置到文件
+    save_config "XRAY_SUB_URL" "$sub_url"
+    save_config "HTTP_PORT" "$http_port"
+    save_config "SOCKS_PORT" "$socks_port"
+    
+    XRAY_SUB_URL="$sub_url"
+    HTTP_PORT="$http_port"
+    SOCKS_PORT="$socks_port"
+    
+    info "Configuration saved to file: $CONFIG_FILE"
+    info "Subscription URL: $sub_url"
+    info "HTTP port: $http_port"
+    info "SOCKS port: $socks_port"
+    
+    echo "GITHUB PROXY: $GH_PROXY"
     info "Downloading config templates..."
     rm -fr $TEMLATES_DIR/*
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_grpc.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_grpc.json' || error "Download tmp_win_trojan_grpc.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_tcp.json' || error "Download tmp_win_trojan_tcp.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_trojan_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_ws.json' || error "Download tmp_win_trojan_ws.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_vless_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_tcp.json' || error "Download tmp_win_vless_tcp.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_vless_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_ws.json' || error "Download tmp_win_vless_ws.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_vmess_ws.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_ws.json' || error "Download tmp_win_vmess_ws.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_vmess_tcp.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_tcp.json' || error "Download tmp_win_vmess_tcp.json failed"
-    wget -qO $TEMLATES_DIR/tmp_win_ss.json ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_ss.json' || error "Download tmp_win_ss.json failed"
+    
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_grpc.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_grpc.json' && echo -n ".." || error "Download tmp_win_trojan_grpc.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_tcp.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_tcp.json' && echo -n ".." || error "Download tmp_win_trojan_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_trojan_ws.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_trojan_ws.json' && echo -n ".." || error "Download tmp_win_trojan_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vless_tcp.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_tcp.json' && echo -n ".." || error "Download tmp_win_vless_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vless_ws.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vless_ws.json' && echo -n ".." || error "Download tmp_win_vless_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vmess_ws.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_ws.json' && echo -n ".." || error "Download tmp_win_vmess_ws.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_vmess_tcp.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_vmess_tcp.json' && echo -n ".." || error "Download tmp_win_vmess_tcp.json failed"
+    wget -qO $TEMLATES_DIR/tmp_win_ss.json --timeout=20 --tries=3 ${GH_PROXY}'https://raw.githubusercontent.com/MinionTim/xray-configer/main/templates/tmp_win_ss.json' && echo -n ".." || error "Download tmp_win_ss.json failed"
 
     if [ $(find "$TEMLATES_DIR" -maxdepth 1 -name "*.json" | wc -l) -eq 0 ]; then
         error "Download templates failed."
@@ -357,10 +459,16 @@ nodes_list() {
 }
 
 change_node() {
-    nodes_list
-    reading "Please input the node index you want to change to:(e.g. 01) " node_index
-    # 如果找到了以[$node_index]开头的行，则打印该行的内容，否则提示输入错误
+    # 如果提供了参数，则使用参数作为节点索引
+    local node_index=$1
     
+    # 如果没有提供参数，则显示节点列表并让用户选择
+    if [ -z "$node_index" ]; then
+        nodes_list
+        reading "Please input the node index you want to change to:(e.g. 01) " node_index
+    fi
+    
+    # 如果找到了以[$node_index]开头的行，则打印该行的内容，否则提示输入错误
     if grep -q "^\[$node_index\]" $HOME_DIR/nodes.txt; then
         local line=$(grep "^\[$node_index\]" $HOME_DIR/nodes.txt)
         # 在OUTPUT_CONFIGS_DIR目录下，找到文件名以$node_index_开头的文件，并打印该文件名
@@ -374,26 +482,20 @@ change_node() {
         [[ "$status" == "active" ]] && info "Xray restarted successfully." || error "Xray restart failed."
         testing_network
     else
-        error "Input error, please try again."
+        error "Node index [$node_index] not found, please try again."
     fi
 }
 
 show_status() {
-    info "当前状态信息:"
-    echo "配置文件路径: $xray_config_path"
-    
-    # 获取当前配置文件的真实路径
-    local current_config=$(readlink -f "$xray_config_path")
-    echo "当前配置文件: $current_config"    
-    
+    echo "Config file path: $xray_config_path"
     nodes_list
     
     # 检查 xray 服务状态
     local status=$(${SYSTEMCTL_ISACTIVE_XRAY[SYS_IDX]})
-    echo "Xray 服务状态: $status"
+    echo "Xray service status: $status"
     
     # 测试网络连接
-    echo "网络连接测试:"
+    echo "Network connection test:"
     testing_network
     
     # 显示代理信息
@@ -439,7 +541,7 @@ check_operating_system() {
 
     # 针对各云厂运的订制系统
     if [ -z "$SYSTEM" ]; then
-        [ $(type -p yum) ] && int=2 && SYSTEM='CentOS' || error "本脚本只支持 Debian、Ubuntu、CentOS、MacOS、Arch 或 Alpine 系统。"
+        [ $(type -p yum) ] && int=2 && SYSTEM='CentOS' || error "This script only supports Debian, Ubuntu, CentOS, MacOS, Arch or Alpine systems."
     fi
     SYS_IDX=$int
     # echo "System Info：$SYS -- $SYSTEM, $SYS_IDX"
@@ -456,10 +558,10 @@ uninstall() {
     echo "shortcut removed."
     crontab -l | grep -v "${HOME_DIR}/$(basename $0)" | crontab -
     echo "cron job removed."
-    unset XRAY_SUB_URL XRAY_CONFIG_PATH
-    info "The script is removed successfully. Environment variables (XRAY_SUB_URL or XRAY_CONFIG_PATH) NOT removed, need to manually remove them."
+    unset XRAY_SUB_URL XRAY_CONFIG_PATH HTTP_PORT SOCKS_PORT
 }
 
+# 在 usage() 函数中添加新的子命令说明
 usage() {
     echo "A assistive tool for xray. It can generate config files from subscribe link, and keep the newest configrations automaticlly."
     echo ""
@@ -470,16 +572,89 @@ usage() {
     echo "  r | update_restart: fetch xrayconfig and restart xray."
     echo "  f | fetch: fetch config only."
     echo "  t | test: test network with proxy."
-    echo "  n | nodes: show node list from subscribe."
-    echo "  c | change_node: choose a node from available nodes."
     echo "  s | status: show current config path, selected node and network status."
-    echo "  i | install: install the script."
+    echo "  i | install: Install script, supports the following parameters:"
+    echo "    -S, --sub_url URL: Set subscription URL (required)"
+    echo "    -h, --http_port PORT: Set HTTP proxy port (default 1087)"
+    echo "    -s, --socks_port PORT: Set SOCKS proxy port (default 1080)"
     echo "  u | uninstall: uninstall the script."
+    echo "  c | config: Modify configuration, supports the following parameters:"
+    echo "    -S, --sub_url URL: Set subscription URL"
+    echo "    -p, --print: Print current configuration"
+    echo "    -h, --http_port PORT: Set HTTP proxy port (default 1087)"
+    echo "    -s, --socks_port PORT: Set SOCKS proxy port (default 1080)"
+    echo "    -n, --node [INDEX]: Change node (if INDEX is provided, switch to that node directly)"
 }
 
+# 添加新的 config_settings 函数
+config_settings() { 
+    [ $# -eq 0 ] && usage && exit 1
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -S|--sub_url)
+                if [[ -n "$2" ]]; then
+                    save_config "XRAY_SUB_URL" "$2"
+                    info "Subscription URL has been updated to: $2"
+                    shift 2
+                else
+                    error "Missing subscription URL parameter"
+                fi
+                ;;
+            -p|--print)
+                info "Current configuration:"
+                if [ -f "$CONFIG_FILE" ]; then
+                    cat "$CONFIG_FILE"
+                    echo
+                    nodes_list
+                    exit
+                else
+                    echo "Configuration file does not exist"
+                fi
+                shift
+                ;;
+            -h|--http_port)
+                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    save_config "HTTP_PORT" "$2"
+                    info "HTTP proxy port has been updated to: $2"
+                    shift 2
+                else
+                    error "HTTP port must be a valid number"
+                fi
+                ;;
+            -s|--socks_port)
+                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    save_config "SOCKS_PORT" "$2"
+                    info "SOCKS proxy port has been updated to: $2"
+                    shift 2
+                else
+                    error "SOCKS port must be a valid number"
+                fi
+                ;;
+            -n|--node)
+                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    # 使用指定的节点索引
+                    change_node "$2"
+                    exit 0
+                else
+                    # 如果没有提供节点索引或索引无效，则显示节点列表并让用户选择
+                    change_node
+                    exit 0
+                fi
+                ;;
+            *)
+                error "Unknown parameter: $1"
+                ;;
+        esac
+    done
+    load_config
+    update_configs_and_restart 1  # 传递参数1表示强制更新
+}
 
+# 在 main() 函数中添加新的子命令处理
 main() {
     check_root
+    
     OPTION=$(tr 'A-Z' 'a-z' <<< "$1")
     hint "[$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION"
     case "$OPTION" in
@@ -487,13 +662,13 @@ main() {
         r | update_restart ) ensure_env && update_configs_and_restart; exit 0;;
         f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;
-        n | nodes ) ensure_env && nodes_list; exit 0;;
-        c | change_node ) ensure_env && change_node; exit 0;;
         s | status ) ensure_env && show_status; exit 0;;
-        i | install ) ensure_env && install; exit 0;;
+        i | install ) shift; ensure_env && install "$@"; exit 0 ;;
         u | uninstall ) uninstall; exit 0;;
+        c | config) shift; ensure_env && config_settings "$@"; exit 0;;
         * ) echo "unknown options \"$OPTION\", please refer to the belowing..."; usage; exit 0;;
     esac
 }
+
 
 main "$@"
