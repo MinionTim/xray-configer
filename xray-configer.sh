@@ -168,13 +168,19 @@ start_with_new_config() {
 
 testing_network() {
     local port=$(cat $xray_config_path | jq -r '.inbounds[] | select(.tag == "http").port')
-    echo "network testing with proxy: http://127.0.0.1:$port"
-    curl -4 --retry 2 -ksm5 --proxy http://127.0.0.1:$port https://www.google.com > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo -e "network test success \u2705"
+    echo "Network testing with proxy: http://127.0.0.1:$port"
+    
+    # 使用curl的-w参数只获取总时间
+    local total_time=$(curl -4 --retry 1 -ksm10 -o /dev/null -w "%{time_total}" --proxy http://127.0.0.1:$port http://www.gstatic.com/generate_204 2>/dev/null)
+    local status=$?
+    
+    if [ $status -eq 0 ]; then
+        # 使用awk将秒转换为毫秒并取整
+        local total_time_ms=$(awk "BEGIN {printf \"%.0f\", $total_time * 1000}")
+        echo -e "Network test success \u2705 (Latency: ${total_time_ms}ms)"
         return 0
     else
-        error "network test failed \u274C"
+        error "Network test failed \u274C - Cannot access Google"
     fi
 }
 
@@ -372,6 +378,28 @@ change_node() {
     fi
 }
 
+show_status() {
+    info "当前状态信息:"
+    echo "配置文件路径: $xray_config_path"
+    
+    # 获取当前配置文件的真实路径
+    local current_config=$(readlink -f "$xray_config_path")
+    echo "当前配置文件: $current_config"    
+    
+    nodes_list
+    
+    # 检查 xray 服务状态
+    local status=$(${SYSTEMCTL_ISACTIVE_XRAY[SYS_IDX]})
+    echo "Xray 服务状态: $status"
+    
+    # 测试网络连接
+    echo "网络连接测试:"
+    testing_network
+    
+    # 显示代理信息
+    show_proxy_info
+}
+
 # 多方式判断操作系统，试到有值为止。只支持 Debian 9/10/11、Ubuntu 18.04/20.04/22.04 或 CentOS 7/8 ,如非上述操作系统，退出脚本
 check_operating_system() {
     unset SYS SYSTEM SYS_IDX
@@ -444,6 +472,7 @@ usage() {
     echo "  t | test: test network with proxy."
     echo "  n | nodes: show node list from subscribe."
     echo "  c | change_node: choose a node from available nodes."
+    echo "  s | status: show current config path, selected node and network status."
     echo "  i | install: install the script."
     echo "  u | uninstall: uninstall the script."
 }
@@ -460,6 +489,7 @@ main() {
         t | test ) ensure_env && testing_network; exit 0;;
         n | nodes ) ensure_env && nodes_list; exit 0;;
         c | change_node ) ensure_env && change_node; exit 0;;
+        s | status ) ensure_env && show_status; exit 0;;
         i | install ) ensure_env && install; exit 0;;
         u | uninstall ) uninstall; exit 0;;
         * ) echo "unknown options \"$OPTION\", please refer to the belowing..."; usage; exit 0;;
