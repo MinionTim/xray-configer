@@ -348,6 +348,8 @@ install() {
         case "$1" in
             -S|--sub_url)
                 if [[ -n "$2" ]]; then
+                    # 添加调试信息
+                    info "Setting subscription URL: $2"
                     sub_url="$2"
                     shift 2
                 else
@@ -400,9 +402,9 @@ install() {
     SOCKS_PORT="$socks_port"
     
     info "Configuration saved to file: $CONFIG_FILE"
-    info "Subscription URL: $sub_url"
-    info "HTTP port: $http_port"
-    info "SOCKS port: $socks_port"
+    # info "Subscription URL: $sub_url"
+    # info "HTTP port: $http_port"
+    # info "SOCKS port: $socks_port"
     
     echo "GITHUB PROXY: $GH_PROXY"
     info "Downloading config templates..."
@@ -651,24 +653,25 @@ config_settings() {
     update_configs_and_restart 1  # 传递参数1表示强制更新
 }
 
-# 在 main() 函数中添加新的子命令处理
 main() {
     check_root
     
     OPTION=$(tr 'A-Z' 'a-z' <<< "$1")
-    hint "[$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION"
+    hint "[$(date '+%Y-%m-%d %H:%M:%S')] run script: $0 $OPTION $2 $3 $4 $5"  # 添加更多参数到日志
     case "$OPTION" in
         h | help | "") usage; exit 0;;
         r | update_restart ) ensure_env && update_configs_and_restart; exit 0;;
         f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;
         s | status ) ensure_env && show_status; exit 0;;
-        i | install ) shift; ensure_env && install "$@"; exit 0 ;;
+        i | install ) 
+            shift
+            ensure_env "install"  # 传递 "install" 参数给 ensure_env
+            install "$@";exit 0 ;;
         u | uninstall ) uninstall; exit 0;;
         c | config) shift; ensure_env && config_settings "$@"; exit 0;;
         * ) echo "unknown options \"$OPTION\", please refer to the belowing..."; usage; exit 0;;
     esac
 }
-
 
 main "$@"
