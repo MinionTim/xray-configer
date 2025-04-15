@@ -4,7 +4,7 @@ HOME_DIR="/etc/xrayconfiger"
 OUTPUT_CONFIGS_DIR="$HOME_DIR/configs"
 TEMLATES_DIR="$HOME_DIR/templates"
 LOGS_DIR="$HOME_DIR/logs"
-CONFIG_FILE="$HOME_DIR/config"
+CONFIG_FILE="$HOME_DIR/x.conf"
 
 DEFAULT_HTTP_PORT=1087
 DEFAULT_SOCKS_PORT=1080
@@ -122,13 +122,13 @@ fetch_configs() {
     echo -n "" > $nodes
     rm -rf $OUTPUT_CONFIGS_DIR/*
     local counter=1
-    while read line; do
+    while read -r line; do
         if [ $counter -gt 100 ]; then
             break
         fi
         #echo "Config ==> $counter, $line"
         local json_info=$(transform_to_json "$line")
-        echo $json_info
+        #echo $json_info
 
         local protocol=$(echo $json_info | jq -r '.protocol')
         local net=$(echo $json_info | jq -r '.net')
@@ -137,35 +137,35 @@ fetch_configs() {
         local idx=$(printf "%02d" $counter)
 
         if [ "$protocol" = "vmess" ] && [ "$net" = "ws" ]; then
-            info "Find protocol: vmess_ws"
+            echo "Find protocol: vmess_ws"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vmess_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_vmess_ws.json
             echo "["$idx"]" "(vmess_ws) $remark" >> $nodes
         elif [ "$protocol" = "vmess" ] && [ "$net" = "tcp" ]; then
-            info "Find protocol: vmess_tcp"
+            echo "Find protocol: vmess_tcp"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vmess_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_vmess_tcp.json
             echo "["$idx"]" "(vmess_tcp) $remark" >> $nodes
         elif [ "$protocol" = "vless" ] && [ "$type" = "ws" ]; then
-            info "Find protocol: vless_ws"
+            echo "Find protocol: vless_ws"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vless_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_vless_ws.json
             echo "["$idx"]" "(vless_ws) $remark" >> $nodes
         elif [ "$protocol" = "vless" ] && [ "$type" = "tcp" ]; then
-            info "Find protocol: vless_tcp"
+            echo "Find protocol: vless_tcp"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_vless_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_vless_tcp.json
             echo "["$idx"]" "(vless_tcp) $remark" >> $nodes
         elif [ "$protocol" = "trojan" ] && [ "$type" = "ws" ]; then
-            info "Find protocol: trojan_ws"
+            echo "Find protocol: trojan_ws"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_ws.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_ws.json
             echo "["$idx"]" "(trojan_ws) $remark" >> $nodes
         elif [ "$protocol" = "trojan" ] && [ "$type" = "grpc" ]; then
-            info "Find protocol: trojan_grpc"
+            echo "Find protocol: trojan_grpc"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_grpc.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_grpc.json
             echo "["$idx"]" "(trojan_grpc) $remark" >> $nodes
         elif [ "$protocol" = "trojan" ] && ( [ "$type" = "null" ] || [ "$type" = "tcp" ] ); then
-            info "Find protocol: trojan_tcp"
+            echo "Find protocol: trojan_tcp"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_trojan_tcp.json ${OUTPUT_CONFIGS_DIR}/${idx}_trojan_tcp.json
             echo "["$idx"]" "(trojan_tcp) $remark" >> $nodes
         elif [ "$protocol" = "ss" ]; then
-            info "Find protocol: ss"
+            echo "Find protocol: ss"
             generate_config "$json_info" ${TEMLATES_DIR}/tmp_win_ss.json ${OUTPUT_CONFIGS_DIR}/${idx}_ss.json
             echo "["$idx"]" "(ss) $remark" >> $nodes
         else
@@ -447,17 +447,19 @@ install() {
 }
 
 nodes_list() {
+    [ ! -f "$HOME_DIR/nodes.txt" ] || [ ! -s "$HOME_DIR/nodes.txt" ] && { echo "node list not found. try to run 'xray-configer r'"; return 1; }
+
     info "Node list:"
-    echo -e "   from \"$XRAY_SUB_URL\"\n------------------------------"
+    echo -e "   from \"$XRAY_SUB_URL\"\n--------------------------------------------"
     local index=$(basename `readlink -f $xray_config_path` | cut -d '_' -f 1)
     while read line; do
         if [[ "$(echo "$line" | sed -n 's|^\[\([0-9]*\)\].*|\1|p')" = "$index" ]]; then
-            warning "*"$line
+            hint "*"$line
         else
             echo $line
         fi
     done < $HOME_DIR/nodes.txt 
-    echo "------------------------------"
+    echo "--------------------------------------------"
 }
 
 change_node() {
@@ -491,6 +493,7 @@ change_node() {
 show_status() {
     echo "Config file path: $xray_config_path"
     nodes_list
+    [ $? -ne 0 ] && return 1
     
     # 检查 xray 服务状态
     local status=$(${SYSTEMCTL_ISACTIVE_XRAY[SYS_IDX]})
@@ -572,20 +575,20 @@ usage() {
     echo "options:"
     echo "  h | help: print help info."
     echo "  r | update_restart: fetch xrayconfig and restart xray."
-    echo "  f | fetch: fetch config only."
     echo "  t | test: test network with proxy."
     echo "  s | status: show current config path, selected node and network status."
-    echo "  i | install: Install script, supports the following parameters:"
-    echo "    -S, --sub_url URL: Set subscription URL (required)"
-    echo "    -h, --http_port PORT: Set HTTP proxy port (default 1087)"
-    echo "    -s, --socks_port PORT: Set SOCKS proxy port (default 1080)"
-    echo "  u | uninstall: uninstall the script."
     echo "  c | config: Modify configuration, supports the following parameters:"
     echo "    -S, --sub_url URL: Set subscription URL"
     echo "    -p, --print: Print current configuration"
     echo "    -h, --http_port PORT: Set HTTP proxy port (default 1087)"
     echo "    -s, --socks_port PORT: Set SOCKS proxy port (default 1080)"
     echo "    -n, --node [INDEX]: Change node (if INDEX is provided, switch to that node directly)"
+    echo "  i | install: Install script, supports the following parameters:"
+    echo "    -S, --sub_url URL: Set subscription URL (required)"
+    echo "    -h, --http_port PORT: Set HTTP proxy port (default 1087)"
+    echo "    -s, --socks_port PORT: Set SOCKS proxy port (default 1080)"
+    echo "  u | uninstall: uninstall the script."
+    
 }
 
 # 添加新的 config_settings 函数
@@ -661,7 +664,6 @@ main() {
     case "$OPTION" in
         h | help | "") usage; exit 0;;
         r | update_restart ) ensure_env && update_configs_and_restart; exit 0;;
-        f | fetch ) ensure_env && fetch_configs; exit 0;;
         t | test ) ensure_env && testing_network; exit 0;;
         s | status ) ensure_env && show_status; exit 0;;
         i | install ) 

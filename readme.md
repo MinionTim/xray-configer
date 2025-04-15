@@ -13,19 +13,15 @@ GH_PROXY=https://ghfast.top/ bash -c "$(curl -L https://ghfast.top/https://githu
 ## Usage
 ### Install
 ```bash
-wget -N https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && bash xray-configer.sh install
+wget -N https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && bash xray-configer.sh install -S <YOUR_SUBSCRIPTION_URL>
 ```
-During installation, you will be asked to setup some environment variables:
-- XRAY_SUB_URL: Your subscription url
-- XRAY_CONFIG_PATH: The path of your xray config file. (Optional)
-
-**You MUST define these environment variables in profile, such as `~/.bashrc`、`~/.zshrc`，to make sure the script can run properly in cron jobs.**
+replace `<YOUR_SUBSCRIPTION_URL>` with your subscription link.
 
 
 ### (Optional) Install with proxy
 - Use http proxy instead if network is not well
 ```bash
-wget -N https://ghfast.top/https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && GH_PROXY=https://ghfast.top/ bash xray-configer.sh install
+wget -N https://ghfast.top/https://github.com/MinionTim/xray-configer/raw/main/xray-configer.sh && GH_PROXY=https://ghfast.top/ bash xray-configer.sh install -S <YOUR_SUBSCRIPTION_URL>
 ```
 
 ### Run 
@@ -41,7 +37,8 @@ xray-configer [option]
 | ----- | -------------- |
 |    h \| help | print help info.         |
 |   r \| update_restart | fetch xrayconfig and restart xray service  |
-|    f \| fetch |fetch config only          |
 |    t \| test |test network with proxy        |
+|    s \| status |show current config path, selected node and network status        |
+|    c \| config |Modify configuration       |
 |    i \| install | install the script         |
 |    u \| uninstall | **uninstall** the script     |
